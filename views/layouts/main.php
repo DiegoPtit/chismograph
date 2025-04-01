@@ -27,6 +27,8 @@ $this->registerLinkTag(['rel' => 'icon', 'type' => 'image/x-icon', 'href' => Yii
     <title><?= Html::encode($this->title) ?></title>
     <?php $this->head() ?>
     <?= Html::cssFile('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css') ?>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
 </head>
 <body class="d-flex flex-column h-100">
 <?php $this->beginBody() ?>
@@ -130,21 +132,29 @@ $this->registerLinkTag(['rel' => 'icon', 'type' => 'image/x-icon', 'href' => Yii
         }
     }
 
-    $menuItems[] = Yii::$app->user->isGuest
-        ? [
+    // Agregar elementos para usuarios registrados
+    if (!Yii::$app->user->isGuest) {
+        $menuItems[] = [
+            'label' => '<i class="fas fa-user-circle"></i> Mi Perfil',
+            'url' => ['/site/perfil'],
+            'encode' => false,
+            'options' => ['class' => 'nav-item mx-2']
+        ];
+        
+        $menuItems[] = [
+            'label' => '<i class="fas fa-sign-out-alt"></i> Cerrar Sesión (' . Yii::$app->user->identity->user . ')',
+            'url' => ['/site/logout'],
+            'encode' => false,
+            'options' => ['class' => 'nav-item mx-2']
+        ];
+    } else {
+        $menuItems[] = [
             'label' => '<i class="fas fa-sign-in-alt"></i> Iniciar Sesión',
             'url' => ['/site/login'],
             'encode' => false,
             'options' => ['class' => 'nav-item mx-2']
-        ]
-        : '<li class="nav-item mx-2">'
-            . Html::beginForm(['/site/logout'])
-            . Html::submitButton(
-                '<i class="fas fa-sign-out-alt"></i> Cerrar Sesión (' . Yii::$app->user->identity->user . ')',
-                ['class' => 'nav-link btn btn-link logout']
-            )
-            . Html::endForm()
-            . '</li>';
+        ];
+    }
 
     echo Nav::widget([
         'options' => [

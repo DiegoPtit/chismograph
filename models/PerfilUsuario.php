@@ -15,7 +15,7 @@ use Yii;
  * @property string|null $descripcion
  * @property string|null $pais
  * @property int|null $edad
- * @property string|null $genero
+ * @property int|null $genero
  * @property string|null $gustos
  * @property string|null $motivo
  *
@@ -42,12 +42,12 @@ class PerfilUsuario extends \yii\db\ActiveRecord
             [['foto_portada', 'foto_perfil', 'descripcion', 'pais', 'edad', 'genero', 'gustos', 'motivo'], 'default', 'value' => null],
             [['cred_index'], 'default', 'value' => 0],
             [['user_id'], 'required'],
-            [['user_id', 'edad'], 'integer'],
+            [['user_id', 'edad', 'genero'], 'integer'],
             [['cred_index'], 'number'],
             [['descripcion'], 'string'],
             [['gustos', 'motivo'], 'safe'],
             [['foto_portada', 'foto_perfil'], 'string', 'max' => 255],
-            [['pais', 'genero'], 'string', 'max' => 50],
+            [['pais'], 'string', 'max' => 50],
             [['user_id'], 'exist', 'skipOnError' => true, 'targetClass' => Usuarios::class, 'targetAttribute' => ['user_id' => 'id']],
         ];
     }

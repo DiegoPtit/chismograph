@@ -16,6 +16,8 @@ use app\models\ReportedPosts;
 use app\models\ReportedUsers;
 use app\models\BannedPosts;
 use app\models\BannedUsuarios;
+use yii\web\UploadedFile;
+use app\models\PerfilUsuario;
 
 class SiteController extends BaseController
 {
@@ -27,7 +29,7 @@ class SiteController extends BaseController
         return [
             'access' => [
                 'class' => AccessControl::class,
-                'only' => ['logout', 'ban-post', 'ban-user'],
+                'only' => ['logout', 'ban-post', 'ban-user', 'update-profile-photo', 'update-profile-info'],
                 'rules' => [
                     [
                         'actions' => ['logout'],
@@ -36,6 +38,11 @@ class SiteController extends BaseController
                     ],
                     [
                         'actions' => ['ban-post', 'ban-user'],
+                        'allow' => true,
+                        'roles' => ['@'],
+                    ],
+                    [
+                        'actions' => ['update-profile-photo', 'update-profile-info'],
                         'allow' => true,
                         'roles' => ['@'],
                     ],
@@ -49,6 +56,8 @@ class SiteController extends BaseController
                     'dislike' => ['post'],
                     'ban-post' => ['post'],
                     'ban-user' => ['post'],
+                    'update-profile-photo' => ['post'],
+                    'update-profile-info' => ['post'],
                 ],
             ],
         ];
@@ -659,21 +668,75 @@ public function actionNotificaciones()
     ]);
 }
 
+public function actionPerfil()
+{
+    if (Yii::$app->user->isGuest) {
+        Yii::$app->session->setFlash('error', 'Debes estar registrado para ver tu perfil.');
+        return $this->redirect(['site/login']);
+    }
+
+    $model = PerfilUsuario::findOne(['user_id' => Yii::$app->user->id]);
+    if (!$model) {
+        Yii::$app->session->setFlash('error', 'No se encontró tu perfil.');
+        return $this->redirect(['site/index']);
+    }
+
+    // Obtener los posts del usuario
+    $posts = Posts::find()
+        ->where(['usuario_id' => Yii::$app->user->id])
+        ->orderBy(['created_at' => SORT_DESC])
+        ->all();
+
+    return $this->render('perfil', [
+        'model' => $model,
+        'posts' => $posts
+    ]);
+}
+
 // SiteController.php
 public function actionRegister()
 {
     $model = new Usuarios();
+    $perfil = new PerfilUsuario();
 
-    if ($model->load(Yii::$app->request->post())) {
+    if ($this->request->isPost) {
+        $model->load(Yii::$app->request->post());
+        $perfil->load(Yii::$app->request->post());
+        
+        // Generar auth_key
+        $model->auth_key = Yii::$app->security->generateRandomString();
+        // Encriptar contraseña
+        $model->pwd = Yii::$app->security->generatePasswordHash($model->pwd);
+        
+        // Calcular edad basada en el cumpleaños
+        $birthDate = new \DateTime($model->birthday);
+        $today = new \DateTime();
+        $edad = $birthDate->diff($today)->y;
+
+        // Manejar la subida de la foto de perfil
+        $foto_perfil = UploadedFile::getInstance($perfil, 'foto_perfil');
+        
         if ($model->save()) {
-            Yii::$app->session->setFlash('success', 'Registro exitoso. Por favor inicie sesión.');
-            return $this->redirect(['login']);
-        } else {
-            Yii::$app->session->setFlash('error', 'Error en el registro. Verifique los datos.');
+            $perfil->user_id = $model->id;
+            $perfil->edad = $edad;
+            $perfil->cred_index = 1;
+            
+            // Guardar foto si se subió una
+            if ($foto_perfil) {
+                $fileName = 'profile_' . $model->id . '.' . $foto_perfil->extension;
+                $foto_perfil->saveAs('uploads/' . $fileName);
+                $perfil->foto_perfil = $fileName;
+            }
+            
+            if ($perfil->save()) {
+                Yii::$app->session->setFlash('success', 'Registro exitoso. Por favor inicia sesión.');
+                return $this->redirect(['site/login']);
+            }
         }
     }
-
-    return $this->redirect(['login']);
+    
+    Yii::$app->session->setFlash('error', 'Error al registrar usuario.');
+    return $this->redirect(['site/login']);
 }
 
 
@@ -1231,6 +1294,188 @@ public function actionRegister()
                 'message' => 'Error al procesar la solicitud: ' . $e->getMessage(),
                 'type' => 'error'
             ];
+        }
+    }
+
+    public function actionUpdateProfilePhoto()
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+        
+        if (!Yii::$app->request->isAjax || !Yii::$app->request->isPost) {
+            return [
+                'success' => false,
+                'message' => 'Solicitud no válida'
+            ];
+        }
+
+        try {
+            $type = Yii::$app->request->post('type');
+            $action = Yii::$app->request->post('action');
+            
+            // Obtener el perfil del usuario actual
+            $perfil = PerfilUsuario::findOne(['user_id' => Yii::$app->user->id]);
+            if (!$perfil) {
+                throw new \Exception('No se encontró el perfil del usuario');
+            }
+
+            // Si la acción es eliminar
+            if ($action === 'delete') {
+                // Actualizar el campo correspondiente en la base de datos
+                if ($type === 'profile') {
+                    $perfil->foto_perfil = null;
+                } elseif ($type === 'cover') {
+                    $perfil->foto_portada = null;
+                }
+                
+                if ($perfil->save()) {
+                    return [
+                        'success' => true,
+                        'message' => 'Foto eliminada exitosamente'
+                    ];
+                }
+                
+                throw new \Exception('Error al actualizar el perfil');
+            }
+            
+            // Si la acción es subir una nueva foto
+            $file = UploadedFile::getInstanceByName('photo');
+            if (!$file) {
+                throw new \Exception('No se ha subido ningún archivo');
+            }
+            
+            // Validar tipo de archivo
+            if (!in_array($file->type, ['image/jpeg', 'image/png'])) {
+                throw new \Exception('Solo se permiten archivos JPG y PNG');
+            }
+            
+            // Validar tamaño del archivo (máximo 5MB)
+            if ($file->size > 5 * 1024 * 1024) {
+                throw new \Exception('El archivo no debe superar los 5MB');
+            }
+            
+            // Generar nombre único para el archivo
+            $extension = $file->extension;
+            $fecha = date('Ymd');
+            $usuario = Yii::$app->user->identity->user;
+            
+            // Determinar el prefijo según el tipo de foto
+            $prefix = ($type === 'profile') ? 'PRFIMG' : 'CVRIMG';
+            
+            // Buscar el último contador usado para este tipo de foto en este día
+            $uploadPath = Yii::getAlias('@webroot') . '/uploads';
+            $files = glob($uploadPath . '/' . $prefix . '_' . $fecha . '_' . $usuario . '*.' . $extension);
+            
+            if (empty($files)) {
+                // Si no hay archivos, usar el nombre base sin contador
+                $nombreArchivo = "{$prefix}_{$fecha}_{$usuario}.{$extension}";
+            } else {
+                // Encontrar el contador más alto usado
+                $maxCounter = 0;
+                foreach ($files as $existingFile) {
+                    if (preg_match('/' . $prefix . '_' . $fecha . '_' . $usuario . '(\d+)\.' . $extension . '$/', $existingFile, $matches)) {
+                        $counter = intval($matches[1]);
+                        $maxCounter = max($maxCounter, $counter);
+                    }
+                }
+                // Usar el siguiente contador
+                $nombreArchivo = "{$prefix}" . ($maxCounter + 1) . "_{$fecha}_{$usuario}.{$extension}";
+            }
+            
+            // Asegurarse de que el directorio existe
+            if (!file_exists($uploadPath)) {
+                if (!@mkdir($uploadPath, 0777, true)) {
+                    throw new \Exception('No se pudo crear el directorio de uploads. Verifique los permisos.');
+                }
+            }
+            
+            // Verificar permisos del directorio
+            if (!is_writable($uploadPath)) {
+                throw new \Exception('El directorio de uploads no tiene permisos de escritura');
+            }
+            
+            // Ruta completa donde se guardará el archivo
+            $rutaArchivo = $uploadPath . '/' . $nombreArchivo;
+            
+            // Guardar el archivo
+            if (!$file->saveAs($rutaArchivo)) {
+                throw new \Exception('Error al guardar el archivo. Verifique los permisos.');
+            }
+            
+            // Actualizar el campo correspondiente en la base de datos
+            if ($type === 'profile') {
+                $perfil->foto_perfil = $nombreArchivo;
+            } else {
+                $perfil->foto_portada = $nombreArchivo;
+            }
+            
+            if (!$perfil->save()) {
+                // Si hay error al guardar, eliminar el archivo nuevo
+                @unlink($rutaArchivo);
+                throw new \Exception('Error al actualizar el perfil: ' . implode(', ', $perfil->getErrorSummary(true)));
+            }
+            
+            return [
+                'success' => true,
+                'photoUrl' => Yii::$app->request->baseUrl . '/uploads/' . $nombreArchivo
+            ];
+            
+        } catch (\Exception $e) {
+            Yii::error('Error en updateProfilePhoto: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Update profile information
+     */
+    public function actionUpdateProfileInfo()
+    {
+        Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
+
+        if (!Yii::$app->request->isAjax) {
+            return ['success' => false, 'message' => 'Acceso no permitido'];
+        }
+
+        $model = PerfilUsuario::findOne(['user_id' => Yii::$app->user->id]);
+        if (!$model) {
+            return ['success' => false, 'message' => 'Perfil no encontrado'];
+        }
+
+        // Obtener datos del POST
+        $post = Yii::$app->request->post();
+        Yii::info('POST data: ' . json_encode($post), 'application');
+
+        // Actualizar solo los campos que se envían
+        if (isset($post['pais'])) {
+            $model->pais = $post['pais'];
+        }
+        if (isset($post['edad'])) {
+            $model->edad = $post['edad'];
+        }
+        if (isset($post['fecha_nacimiento'])) {
+            $model->fecha_nacimiento = $post['fecha_nacimiento'];
+        }
+        if (isset($post['descripcion'])) {
+            $model->descripcion = $post['descripcion'];
+        }
+        if (isset($post['gustos'])) {
+            // Los gustos se envían como un string JSON, se guarda tal cual
+            $model->gustos = $post['gustos'];
+        }
+        if (isset($post['motivo'])) {
+            // Los motivos se envían como un string JSON, se guarda tal cual
+            $model->motivo = $post['motivo'];
+        }
+
+        if ($model->save()) {
+            return ['success' => true];
+        } else {
+            // Si hay errores de validación, los retornamos
+            Yii::error('Error al guardar perfil: ' . json_encode($model->errors), 'application');
+            return ['success' => false, 'message' => 'Error al actualizar el perfil', 'errors' => $model->errors];
         }
     }
 }
