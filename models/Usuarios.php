@@ -3,24 +3,24 @@
 namespace app\models;
 
 use Yii;
-use yii\behaviors\TimestampBehavior;
-use yii\web\IdentityInterface;
 
 /**
  * This is the model class for table "usuarios".
  *
  * @property int $id
+ * @property int $rol_id
  * @property string $user
  * @property string $pwd
  * @property string $birthday
  * @property string|null $created_at
- * @property int|null $rol_id
+ * @property string $auth_key
  *
  * @property Notificaciones[] $notificaciones
+ * @property PayHistoric[] $payHistorics
+ * @property PerfilUsuario[] $perfilUsuarios
  * @property Posts[] $posts
- * @property Roles $rol
  */
-class Usuarios extends \yii\db\ActiveRecord implements IdentityInterface
+class Usuarios extends \yii\db\ActiveRecord
 {
 
 
@@ -32,73 +32,18 @@ class Usuarios extends \yii\db\ActiveRecord implements IdentityInterface
         return 'usuarios';
     }
 
-    public function behaviors()
-    {
-        return [
-            [
-                'class' => TimestampBehavior::class,
-                'createdAtAttribute' => 'created_at',
-                'updatedAtAttribute' => null,
-                'value' => date('Y-m-d H:i:s'),
-            ],
-        ];
-    }
-
-    public static function findIdentity($id)
-    {
-        return static::findOne($id);
-    }
-
-    public static function findIdentityByAccessToken($token, $type = null)
-    {
-        return null; // No implementado para este ejemplo
-    }
-
-    public function getId()
-    {
-        return $this->id;
-    }
-
-    public function getAuthKey()
-    {
-        return $this->auth_key;
-    }
-
-    public function validateAuthKey($authKey)
-    {
-        return $this->auth_key === $authKey;
-    }
-
-    /**
-     * Genera auth_key antes de guardar
-     */
-    public function beforeSave($insert)
-    {
-        if (parent::beforeSave($insert)) {
-            if ($this->isNewRecord) {
-                $this->auth_key = Yii::$app->security->generateRandomString();
-            }
-            if ($this->isAttributeChanged('pwd')) {
-                $this->pwd = Yii::$app->security->generatePasswordHash($this->pwd);
-            }
-            return true;
-        }
-        return false;
-    }
-
     /**
      * {@inheritdoc}
      */
     public function rules()
     {
         return [
-            [['user', 'pwd', 'birthday'], 'required'],
-            [['pwd'], 'string'],
-            [['birthday', 'created_at'], 'safe'],
-            [['user'], 'string', 'max' => 180],
-            [['auth_key'], 'string', 'max' => 32],
+            [['rol_id'], 'default', 'value' => 1316],
             [['rol_id'], 'integer'],
-            [['rol_id'], 'exist', 'skipOnError' => true, 'targetClass' => Roles::class, 'targetAttribute' => ['rol_id' => 'id']],
+            [['user', 'pwd', 'birthday', 'auth_key'], 'required'],
+            [['birthday', 'created_at'], 'safe'],
+            [['user', 'pwd'], 'string', 'max' => 180],
+            [['auth_key'], 'string', 'max' => 32],
         ];
     }
 
@@ -109,11 +54,12 @@ class Usuarios extends \yii\db\ActiveRecord implements IdentityInterface
     {
         return [
             'id' => Yii::t('app', 'ID'),
-            'user' => Yii::t('app', 'Usuario'),
-            'pwd' => Yii::t('app', 'Contraseña'),
-            'birthday' => Yii::t('app', 'Fecha de Nacimiento'),
+            'rol_id' => Yii::t('app', 'Rol ID'),
+            'user' => Yii::t('app', 'User'),
+            'pwd' => Yii::t('app', 'Pwd'),
+            'birthday' => Yii::t('app', 'Birthday'),
             'created_at' => Yii::t('app', 'Created At'),
-            'rol_id' => Yii::t('app', 'Rol'),
+            'auth_key' => Yii::t('app', 'Auth Key'),
         ];
     }
 
@@ -128,6 +74,26 @@ class Usuarios extends \yii\db\ActiveRecord implements IdentityInterface
     }
 
     /**
+     * Gets query for [[PayHistorics]].
+     *
+     * @return \yii\db\ActiveQuery
+     */
+    public function getPayHistorics()
+    {
+        return $this->hasMany(PayHistoric::class, ['user_id' => 'id']);
+    }
+
+    /**
+     * Gets query for [[PerfilUsuarios]].
+     *
+     * @return \yii\db\ActiveQuery
+     */
+    public function getPerfilUsuarios()
+    {
+        return $this->hasMany(PerfilUsuario::class, ['user_id' => 'id']);
+    }
+
+    /**
      * Gets query for [[Posts]].
      *
      * @return \yii\db\ActiveQuery
@@ -135,16 +101,6 @@ class Usuarios extends \yii\db\ActiveRecord implements IdentityInterface
     public function getPosts()
     {
         return $this->hasMany(Posts::class, ['usuario_id' => 'id']);
-    }
-
-    /**
-     * Gets query for [[Rol]].
-     *
-     * @return \yii\db\ActiveQuery
-     */
-    public function getRol()
-    {
-        return $this->hasOne(Roles::class, ['id' => 'rol_id']);
     }
 
 }

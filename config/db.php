@@ -2,7 +2,7 @@
 
 return [
     'class' => 'yii\db\Connection',
-    'dsn' => 'mysql:host=localhost;dbname=if0_38586524_chismoso_db',
+    'dsn' => 'mysql:host=localhost;dbname=chismograph',
     'username' => 'root',
     'password' => '',
     'charset' => 'utf8',

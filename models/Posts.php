@@ -14,7 +14,12 @@ use Yii;
  * @property string|null $created_at
  * @property int|null $likes
  * @property int|null $dislikes
- * @property int $genre
+ * @property float|null $cred_index
+ * @property int|null $isGob
+ * @property int|null $isCel
+ * @property int|null $isNews
+ * @property int|null $isUser
+ * @property int|null $isAdmin
  *
  * @property Notificaciones[] $notificaciones
  * @property Notificaciones[] $notificaciones0
@@ -41,18 +46,14 @@ class Posts extends \yii\db\ActiveRecord
     {
         return [
             [['padre_id'], 'default', 'value' => null],
-            [['dislikes'], 'default', 'value' => 0],
-            [['genre'], 'default', 'value' => 0],
+            [['isAdmin'], 'default', 'value' => 0],
             [['usuario_id', 'contenido'], 'required'],
-            [['usuario_id', 'padre_id', 'likes', 'dislikes'], 'integer'],
+            [['usuario_id', 'padre_id', 'likes', 'dislikes', 'isGob', 'isCel', 'isNews', 'isUser', 'isAdmin'], 'integer'],
             [['created_at'], 'safe'],
+            [['cred_index'], 'number'],
             [['contenido'], 'string', 'max' => 480],
             [['usuario_id'], 'exist', 'skipOnError' => true, 'targetClass' => Usuarios::class, 'targetAttribute' => ['usuario_id' => 'id']],
             [['padre_id'], 'exist', 'skipOnError' => true, 'targetClass' => Posts::class, 'targetAttribute' => ['padre_id' => 'id']],
-            [['age'], 'integer', 'min' => 1, 'max' => 120],
-            [['age', 'genre', 'contenido'], 'required'], // Requeridos
-            [['age'], 'integer', 'min' => 1, 'max' => 120],
-            [['genre'], 'integer', 'min' => 0, 'max' => 2],
         ];
     }
 
@@ -69,6 +70,12 @@ class Posts extends \yii\db\ActiveRecord
             'created_at' => Yii::t('app', 'Created At'),
             'likes' => Yii::t('app', 'Likes'),
             'dislikes' => Yii::t('app', 'Dislikes'),
+            'cred_index' => Yii::t('app', 'Cred Index'),
+            'isGob' => Yii::t('app', 'Is Gob'),
+            'isCel' => Yii::t('app', 'Is Cel'),
+            'isNews' => Yii::t('app', 'Is News'),
+            'isUser' => Yii::t('app', 'Is User'),
+            'isAdmin' => Yii::t('app', 'Is Admin'),
         ];
     }
 
@@ -121,12 +128,5 @@ class Posts extends \yii\db\ActiveRecord
     {
         return $this->hasOne(Usuarios::class, ['id' => 'usuario_id']);
     }
-
-    public function getSubcomentarios()
-{
-    return $this->hasMany(Posts::class, ['padre_id' => 'id'])
-                ->orderBy(['created_at' => SORT_DESC]);
-}
-
 
 }
